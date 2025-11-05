@@ -72,6 +72,7 @@
           <table id="schedule-table" class="table table-hover align-middle">
             <thead>
               <tr>
+                <th style="width: 3rem;"></th>
                 <th style="width: 11rem;">Date</th>
                 <th style="width: 7rem;">Start</th>
                 <th style="width: 7rem;">End</th>
@@ -98,7 +99,7 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
+                  <td colspan="7" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
                 </tr>
               {% endif %}
             </tbody>
