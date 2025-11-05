@@ -25,10 +25,8 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('add') }}" class="row g-3">
           <div class="col-4">
-            <label class="form-label">Day</label>
-            <select name="day" class="form-select">
-              {% for d in days %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-            </select>
+            <label class="form-label">Date</label>
+            <input name="date" type="date" class="form-control" value="{{ week_start.isoformat() }}">
           </div>
           <div class="col-4">
             <label class="form-label">Start</label>
@@ -68,15 +66,6 @@
           <div class="fw-semibold">Week at a glance</div>
           <div class="text-muted small">{{ week_start.strftime('%b %d, %Y') }} – {{ week_end.strftime('%b %d, %Y') }}</div>
         </div>
-        <div class="d-flex align-items-center gap-2">
-          <label for="providerFilter" class="form-label small mb-0 text-muted">Provider</label>
-          <select id="providerFilter" class="form-select form-select-sm" {% if not providers %}disabled{% endif %}>
-            <option value="">All providers</option>
-            {% for provider in providers %}
-              <option value="{{ provider }}">{{ provider }}</option>
-            {% endfor %}
-          </select>
-        </div>
       </div>
       <div class="card-body">
         <div class="table-responsive">
@@ -96,10 +85,7 @@
               {% if schedule %}
                 {% for it in schedule %}
                 {% set entry_date = day_dates.get(it.day) %}
-                <tr data-provider="{{ it.provider }}">
-                  <td class="text-center">
-                    <input type="checkbox" class="form-check-input">
-                  </td>
+                <tr>
                   <td>
                     <div class="fw-semibold">{{ entry_date.strftime('%a') if entry_date else it.day }}</div>
                     <div class="text-muted small">{{ entry_date.strftime('%b %d, %Y') if entry_date else '' }}</div>
@@ -123,25 +109,4 @@
     </div>
   </div>
 </div>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const filter = document.getElementById('providerFilter');
-    const table = document.getElementById('schedule-table');
-    if (!filter || !table) {
-      return;
-    }
-    filter.addEventListener('change', () => {
-      const selected = filter.value.trim().toLowerCase();
-      const rows = table.querySelectorAll('tbody tr[data-provider]');
-      rows.forEach((row) => {
-        const provider = (row.getAttribute('data-provider') || '').trim().toLowerCase();
-        if (!selected || provider === selected) {
-          row.classList.remove('d-none');
-        } else {
-          row.classList.add('d-none');
-        }
-      });
-    });
-  });
-</script>
 {% endblock %}
