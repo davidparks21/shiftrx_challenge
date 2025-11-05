@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import json
 import re
+from datetime import date, timedelta
 from typing import List, Dict, Any
 
 import requests
@@ -15,8 +16,18 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 SCHEDULE: List[Dict[str, Any]] = []
 
 # Helper: normalize and validate a schedule item
-# Schema: {day: "Mon".."Sun", start: "09:00", end: "10:30", title: str, note?: str}
+# Schema: {day: "Mon".."Sun", start: "09:00", end: "10:30", title: str, note?: str, provider?: str}
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def current_week_start(today: date | None = None) -> date:
+    base = today or date.today()
+    return base - timedelta(days=base.weekday())
+
+
+def week_bounds() -> tuple[date, date]:
+    start = current_week_start()
+    return start, start + timedelta(days=6)
 
 
 def _to_hhmm(s: str) -> str:
@@ -31,7 +42,15 @@ def _to_hhmm(s: str) -> str:
         raise ValueError(f"Invalid time: {s}")
 
 
-def add_item(day: str, start: str, end: str, title: str, note: str | None = None) -> None:
+def add_item(
+    day: str,
+    start: str,
+    end: str,
+    title: str,
+    *,
+    note: str | None = None,
+    provider: str | None = None,
+) -> None:
     day_norm = day.strip().title()[:3]
     if day_norm not in DAYS:
         raise ValueError("Day must be one of Mon..Sun")
@@ -39,6 +58,7 @@ def add_item(day: str, start: str, end: str, title: str, note: str | None = None
     end_hhmm = _to_hhmm(end)
     if end_hhmm <= start_hhmm:
         raise ValueError("End must be after start")
+    provider_name = (provider or "Unassigned").strip() or "Unassigned"
     SCHEDULE.append(
         {
             "day": day_norm,
@@ -46,6 +66,7 @@ def add_item(day: str, start: str, end: str, title: str, note: str | None = None
             "end": end_hhmm,
             "title": title.strip(),
             "note": (note or "").strip(),
+            "provider": provider_name,
         }
     )
 
@@ -56,7 +77,15 @@ def clear_schedule() -> None:
 
 def sorted_schedule() -> List[Dict[str, Any]]:
     day_index = {d: i for i, d in enumerate(DAYS)}
-    return sorted(SCHEDULE, key=lambda x: (day_index[x["day"]], x["start"]))
+    normalised_items: List[Dict[str, Any]] = []
+    for item in SCHEDULE:
+        normalised_items.append(
+            {
+                **item,
+                "provider": item.get("provider", "Unassigned") or "Unassigned",
+            }
+        )
+    return sorted(normalised_items, key=lambda x: (day_index[x["day"]], x["start"]))
 
 
 # ----------------------------
@@ -134,7 +163,22 @@ def inject_env():
 # ----------------------------
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", schedule=sorted_schedule(), days=DAYS)
+    schedule_items = sorted_schedule()
+    week_start, week_end = week_bounds()
+    day_dates = {
+        day: week_start + timedelta(days=idx)
+        for idx, day in enumerate(DAYS)
+    }
+    providers = sorted({item["provider"] for item in schedule_items if item.get("provider")})
+    return render_template(
+        "index.html",
+        schedule=schedule_items,
+        days=DAYS,
+        week_start=week_start,
+        week_end=week_end,
+        day_dates=day_dates,
+        providers=providers,
+    )
 
 
 @app.route("/add", methods=["POST"])
@@ -145,7 +189,8 @@ def add():
             request.form.get("start", "09:00"),
             request.form.get("end", "10:00"),
             request.form.get("title", "Untitled"),
-            request.form.get("note", ""),
+            note=request.form.get("note", ""),
+            provider=request.form.get("provider", ""),
         )
         flash("Added item", "success")
     except Exception as e:
@@ -181,7 +226,8 @@ def generate():
                 it.get("start", "09:00"),
                 it.get("end", "10:00"),
                 it.get("title", "Task"),
-                it.get("note", ""),
+                note=it.get("note", ""),
+                provider=it.get("provider", ""),
             )
         flash(f"Generated {len(items)} items from LLM", "success")
     except Exception as e:
