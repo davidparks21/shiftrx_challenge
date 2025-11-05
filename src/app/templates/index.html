@@ -43,6 +43,10 @@
             <input name="title" class="form-control" placeholder="e.g., Deep Work">
           </div>
           <div class="col-12">
+            <label class="form-label">Provider</label>
+            <input name="provider" class="form-control" placeholder="e.g., Dr. Patel">
+          </div>
+          <div class="col-12">
             <label class="form-label">Note (optional)</label>
             <input name="note" class="form-control" placeholder="context or location">
           </div>
@@ -59,35 +63,53 @@
 
   <div class="col-lg-8">
     <div class="card shadow-sm">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Week at a glance</span>
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <div class="fw-semibold">Week at a glance</div>
+          <div class="text-muted small">{{ week_start.strftime('%b %d, %Y') }} – {{ week_end.strftime('%b %d, %Y') }}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <label for="providerFilter" class="form-label small mb-0 text-muted">Provider</label>
+          <select id="providerFilter" class="form-select form-select-sm" {% if not providers %}disabled{% endif %}>
+            <option value="">All providers</option>
+            {% for provider in providers %}
+              <option value="{{ provider }}">{{ provider }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
       <div class="card-body">
         <div class="table-responsive">
-          <table class="table table-hover align-middle">
+          <table id="schedule-table" class="table table-hover align-middle">
             <thead>
               <tr>
-                <th style="width: 8rem;">Day</th>
+                <th style="width: 11rem;">Date</th>
                 <th style="width: 7rem;">Start</th>
                 <th style="width: 7rem;">End</th>
                 <th>Title</th>
+                <th style="width: 10rem;">Provider</th>
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
               {% if schedule %}
                 {% for it in schedule %}
-                <tr>
-                  <td><span class="badge bg-secondary">{{ it.day }}</span></td>
+                {% set entry_date = day_dates.get(it.day) %}
+                <tr data-provider="{{ it.provider }}">
+                  <td>
+                    <div class="fw-semibold">{{ entry_date.strftime('%a') if entry_date else it.day }}</div>
+                    <div class="text-muted small">{{ entry_date.strftime('%b %d, %Y') if entry_date else '' }}</div>
+                  </td>
                   <td>{{ it.start }}</td>
                   <td>{{ it.end }}</td>
                   <td>{{ it.title }}</td>
+                  <td><span class="badge bg-info-subtle text-info-emphasis">{{ it.provider }}</span></td>
                   <td class="text-muted">{{ it.note }}</td>
                 </tr>
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="5" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
+                  <td colspan="6" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
                 </tr>
               {% endif %}
             </tbody>
@@ -97,4 +119,25 @@
     </div>
   </div>
 </div>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const filter = document.getElementById('providerFilter');
+    const table = document.getElementById('schedule-table');
+    if (!filter || !table) {
+      return;
+    }
+    filter.addEventListener('change', () => {
+      const selected = filter.value.trim().toLowerCase();
+      const rows = table.querySelectorAll('tbody tr[data-provider]');
+      rows.forEach((row) => {
+        const provider = (row.getAttribute('data-provider') || '').trim().toLowerCase();
+        if (!selected || provider === selected) {
+          row.classList.remove('d-none');
+        } else {
+          row.classList.add('d-none');
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}
