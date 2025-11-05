@@ -169,23 +169,28 @@ def index():
         day: week_start + timedelta(days=idx)
         for idx, day in enumerate(DAYS)
     }
-    providers = sorted({item["provider"] for item in schedule_items if item.get("provider")})
     return render_template(
         "index.html",
         schedule=schedule_items,
-        days=DAYS,
         week_start=week_start,
         week_end=week_end,
         day_dates=day_dates,
-        providers=providers,
     )
 
 
 @app.route("/add", methods=["POST"])
 def add():
     try:
+        submitted_date = request.form.get("date", "")
+        day_value = request.form.get("day", "Mon")
+        if submitted_date:
+            try:
+                parsed_date = date.fromisoformat(submitted_date)
+                day_value = parsed_date.strftime("%a")
+            except ValueError:
+                pass
         add_item(
-            request.form.get("day", "Mon"),
+            day_value,
             request.form.get("start", "09:00"),
             request.form.get("end", "10:00"),
             request.form.get("title", "Untitled"),
