@@ -83,6 +83,7 @@
           <table id="schedule-table" class="table table-hover align-middle">
             <thead>
               <tr>
+                <th style="width: 3rem;"></th>
                 <th style="width: 11rem;">Date</th>
                 <th style="width: 7rem;">Start</th>
                 <th style="width: 7rem;">End</th>
@@ -96,6 +97,9 @@
                 {% for it in schedule %}
                 {% set entry_date = day_dates.get(it.day) %}
                 <tr data-provider="{{ it.provider }}">
+                  <td class="text-center">
+                    <input type="checkbox" class="form-check-input">
+                  </td>
                   <td>
                     <div class="fw-semibold">{{ entry_date.strftime('%a') if entry_date else it.day }}</div>
                     <div class="text-muted small">{{ entry_date.strftime('%b %d, %Y') if entry_date else '' }}</div>
@@ -109,7 +113,7 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
+                  <td colspan="7" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
                 </tr>
               {% endif %}
             </tbody>
