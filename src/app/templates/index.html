@@ -83,6 +83,7 @@
           <table id="schedule-table" class="table table-hover align-middle">
             <thead>
               <tr>
+                <th style="width: 8rem;">Select</th>
                 <th style="width: 11rem;">Date</th>
                 <th style="width: 7rem;">Start</th>
                 <th style="width: 7rem;">End</th>
@@ -97,6 +98,11 @@
                 {% set entry_date = day_dates.get(it.day) %}
                 <tr data-provider="{{ it.provider }}">
                   <td>
+                    <select class="form-select form-select-sm" aria-label="Select item action">
+                      <option selected disabled value="">Choose…</option>
+                    </select>
+                  </td>
+                  <td>
                     <div class="fw-semibold">{{ entry_date.strftime('%a') if entry_date else it.day }}</div>
                     <div class="text-muted small">{{ entry_date.strftime('%b %d, %Y') if entry_date else '' }}</div>
                   </td>
@@ -109,7 +115,7 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
+                  <td colspan="7" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
                 </tr>
               {% endif %}
             </tbody>
