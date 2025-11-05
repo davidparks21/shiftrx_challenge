@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header">Generate with Ollama</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('generate') }}" class="vstack gap-3">
+          <div>
+            <label for="goals" class="form-label">Goals / constraints</label>
+            <textarea id="goals" name="goals" class="form-control" rows="4" placeholder="e.g., Deep work (20h), strength 3x/week, run 2x, learning 7h, chores, social"></textarea>
+          </div>
+          <div>
+            <label for="seed" class="form-label">Seed (optional)</label>
+            <input id="seed" name="seed" class="form-control" value="Mon-Fri 09:00-17:00 work blocks; daily exercise; 2h learning">
+            <div class="form-text">Used as a hint to the LLM.</div>
+          </div>
+          <button class="btn btn-primary" type="submit">Generate plan</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+      <div class="card-header">Add item manually</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('add') }}" class="row g-3">
+          <div class="col-4">
+            <label class="form-label">Day</label>
+            <select name="day" class="form-select">
+              {% for d in days %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <label class="form-label">Start</label>
+            <input name="start" type="time" class="form-control" value="09:00">
+          </div>
+          <div class="col-4">
+            <label class="form-label">End</label>
+            <input name="end" type="time" class="form-control" value="10:00">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Title</label>
+            <input name="title" class="form-control" placeholder="e.g., Deep Work">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Note (optional)</label>
+            <input name="note" class="form-control" placeholder="context or location">
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button class="btn btn-success" type="submit">Add</button>
+            <form method="post" action="{{ url_for('clear') }}">
+              <button formaction="{{ url_for('clear') }}" class="btn btn-outline-danger" type="submit">Clear all</button>
+            </form>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Week at a glance</span>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th style="width: 8rem;">Day</th>
+                <th style="width: 7rem;">Start</th>
+                <th style="width: 7rem;">End</th>
+                <th>Title</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if schedule %}
+                {% for it in schedule %}
+                <tr>
+                  <td><span class="badge bg-secondary">{{ it.day }}</span></td>
+                  <td>{{ it.start }}</td>
+                  <td>{{ it.end }}</td>
+                  <td>{{ it.title }}</td>
+                  <td class="text-muted">{{ it.note }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted">No items yet. Generate a plan or add items above.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
