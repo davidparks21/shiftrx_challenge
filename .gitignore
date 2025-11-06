@@ -1,2 +1,5 @@
 # pycharm project files
 .idea
+
+# local-only files
+todo.txt
