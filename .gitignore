@@ -1,5 +1,8 @@
 # pycharm project files
-.idea
+.idea/**
+
+# Python leftovers
+**/__pycache__/**
 
 # local-only files
 todo.txt

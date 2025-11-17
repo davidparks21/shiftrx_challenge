@@ -2,12 +2,18 @@ from __future__ import annotations
 import os
 import json
 import re
-from datetime import date, timedelta
-from typing import List, Dict, Any
-
 import requests
+import markdown
+from datetime import date, timedelta, datetime
+from typing import List, Dict, Any
 from dateutil import parser as dateparser
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+
+import data_access_layer.data_store as db
+from data_object_model.application_state import Schedule, Entry, DateRange
+from data_object_model.agent_communication import AgentQuery, AgentResponse
+from model_access_layer.agent import handle_user_prompt
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
@@ -18,6 +24,9 @@ SCHEDULE: List[Dict[str, Any]] = []
 # Helper: normalize and validate a schedule item
 # Schema: {day: "Mon".."Sun", start: "09:00", end: "10:30", title: str, note?: str, provider?: str}
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# Default configuration parameters (future update should centralize these)
+DEFAULT_DATE_RANGE_DAYS = 7
 
 
 def current_week_start(today: date | None = None) -> date:
@@ -43,32 +52,52 @@ def _to_hhmm(s: str) -> str:
 
 
 def add_item(
-    day: str,
-    start: str,
-    end: str,
-    title: str,
-    *,
-    note: str | None = None,
-    provider: str | None = None,
-) -> None:
+        day: str,
+        start: str,
+        end: str,
+        title: str,
+        *,
+        note: str | None = None,
+        provider: str | None = None) -> None:
+    """
+    Normalize and validate an item, then persist it as an Entry via the data store.
+
+    The function keeps the same public API as before (day/start/end/title/note/provider)
+    but now creates an Entry object and stores it in the DB.
+    """
+    # Normalise day ("Mon".."Sun")
     day_norm = day.strip().title()[:3]
     if day_norm not in DAYS:
         raise ValueError("Day must be one of Mon..Sun")
+
+    # Normalise and validate times using the existing helper
     start_hhmm = _to_hhmm(start)
     end_hhmm = _to_hhmm(end)
     if end_hhmm <= start_hhmm:
         raise ValueError("End must be after start")
-    provider_name = (provider or "Unassigned").strip() or "Unassigned"
-    SCHEDULE.append(
-        {
-            "day": day_norm,
-            "start": start_hhmm,
-            "end": end_hhmm,
-            "title": title.strip(),
-            "note": (note or "").strip(),
-            "provider": provider_name,
-        }
+
+    # Convert HH:MM strings to time objects for Entry
+    start_time = datetime.strptime(start_hhmm, "%H:%M").time()
+    end_time = datetime.strptime(end_hhmm, "%H:%M").time()
+
+    # Map day-of-week to a concrete date in the current week
+    week_start = current_week_start()
+    day_index = {d: i for i, d in enumerate(DAYS)}
+    entry_date = week_start + timedelta(days=day_index[day_norm])
+
+    # Build Entry object
+    entry = Entry(
+        entry_id=-1,
+        entry_date=entry_date,
+        start_time=start_time,
+        end_time=end_time,
+        title=title,
+        provider=provider,
+        note=note
     )
+
+    # Persist via data store; no users yet, so user_id=None
+    db.add_entry(entry, user_id=None)
 
 
 def clear_schedule() -> None:
@@ -86,61 +115,6 @@ def sorted_schedule() -> List[Dict[str, Any]]:
             }
         )
     return sorted(normalised_items, key=lambda x: (day_index[x["day"]], x["start"]))
-
-
-# ----------------------------
-# Ollama integration (local)
-# ----------------------------
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
-
-# Also store in Flask config so templates can use {{ config['OLLAMA_MODEL'] }}
-app.config["OLLAMA_MODEL"] = OLLAMA_MODEL
-
-SYSTEM_PROMPT = (
-    "You are a helpful assistant that plans a weekly schedule. "
-    "Return ONLY valid JSON matching this schema: {\n"
-    '  "items": [\n'
-    '    { "day": one of Mon/Tue/Wed/Thu/Fri/Sat/Sun,\n'
-    '      "start": "HH:MM", "end": "HH:MM",\n'
-    '      "title": string, "note": optional string }\n'
-    "  ]\n"
-    "}. No extra commentary. Times in 24-hour local time."
-)
-
-
-def call_ollama_chat(user_prompt: str) -> Dict[str, Any]:
-    """Call Ollama's /api/chat endpoint and return parsed JSON schedule.
-    Falls back to extracting the first JSON object found in the response.
-    """
-    url = f"{OLLAMA_URL}/api/chat"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        "stream": False,
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=120)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("message", {}).get("content", "")
-
-        # Try direct JSON first
-        try:
-            return json.loads(content)
-        except Exception:
-            pass
-
-        # Fallback: extract first JSON object from text
-        m = re.search(r"\{[\s\S]*\}", content)
-        if not m:
-            raise ValueError("LLM did not return JSON")
-        return json.loads(m.group(0))
-    except Exception as e:
-        raise RuntimeError(f"Ollama error: {e}") from e
 
 
 # ----------------------------
@@ -163,19 +137,24 @@ def inject_env():
 # ----------------------------
 @app.route("/", methods=["GET"])
 def index():
-    schedule_items = sorted_schedule()
-    week_start, week_end = week_bounds()
-    day_dates = {
-        day: week_start + timedelta(days=idx)
-        for idx, day in enumerate(DAYS)
-    }
-    return render_template(
-        "index.html",
-        schedule=schedule_items,
-        week_start=week_start,
-        week_end=week_end,
-        day_dates=day_dates,
-    )
+    daterange = session.get("daterange", None)
+    if daterange is None:
+        datetime_to = datetime.now()
+        datetime_from = datetime_to - timedelta(days=DEFAULT_DATE_RANGE_DAYS)
+        daterange = DateRange(datetime_from, datetime_to)
+    else:
+        daterange = DateRange.from_primitive(daterange)
+
+    schedule = db.get_schedule(1, daterange)
+    session["daterange"] = daterange.to_primitive()
+
+    # Convert LLM response markdown → HTML if present
+    conversation = session.get("conversation")
+    if conversation and conversation.get("response"):
+        html = markdown.markdown(conversation["response"])
+        session["conversation"]["html_response"] = html
+
+    return render_template("index.html", schedule=schedule)
 
 
 @app.route("/add", methods=["POST"])
@@ -203,42 +182,66 @@ def add():
     return redirect(url_for("index"))
 
 
-@app.route("/clear", methods=["POST"])
+@app.route("/clear", methods=["POST", "GET"])
 def clear():
     clear_schedule()
-    flash("Schedule cleared", "warning")
+    flash("Schedule items cleared", "warning")
+    return redirect(url_for("index"))
+
+
+@app.post("/clear_conversation")
+def clear_conversation():
+    session.pop("conversation", None)
     return redirect(url_for("index"))
 
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    goals = request.form.get("goals", "")
-    seed = request.form.get("seed", "Mon-Fri 09:00-17:00 work blocks; daily exercise; 2h learning")
-    prompt = (
-        "Create a realistic weekly plan based on these goals. "
-        "Use 30–120 minute blocks, avoid overlaps. "
-        f"Goals: {goals or 'Focus work, exercise, learning, and errands.'} "
-        f"Seed: {seed}."
-    )
-    try:
-        result = call_ollama_chat(prompt)
-        items = result.get("items", [])
-        # Basic validation and load
-        clear_schedule()
-        for it in items:
-            add_item(
-                it.get("day", "Mon"),
-                it.get("start", "09:00"),
-                it.get("end", "10:00"),
-                it.get("title", "Task"),
-                note=it.get("note", ""),
-                provider=it.get("provider", ""),
-            )
-        flash(f"Generated {len(items)} items from LLM", "success")
-    except Exception as e:
-        flash(f"Failed to generate using Ollama: {e}", "danger")
+    # Processes the query and place the response in session["conversation"]
+    user_prompt = request.form.get("user_prompt")
+    agent_query = AgentQuery(user_prompt=user_prompt)
+    daterange = DateRange.from_primitive(session.get("daterange"))
+    schedule = db.get_schedule(1, daterange)
+    session["conversation"] = handle_user_prompt(agent_query, schedule)
+    # Update the session DateRange in case a tool made an update.
+    session["daterange"] = schedule.daterange.to_primitive()
     return redirect(url_for("index"))
 
+
+@app.route("/remove", methods=["POST"])
+def remove():
+    # Get list of selected entry IDs from the form
+    raw_ids = request.form.getlist("selected_items")
+
+    if not raw_ids:
+        flash("No items selected to remove.", "warning")
+        return redirect(url_for("index"))
+
+    # Validate & convert to integers
+    try:
+        entry_ids = [int(x) for x in raw_ids]
+    except ValueError:
+        flash("Invalid selection received.", "danger")
+        return redirect(url_for("index"))
+
+    # Fetch the corresponding Entry objects
+    entries = db.get_entries_by_ids(entry_ids)
+
+    if not entries:
+        flash("No matching schedule items found.", "warning")
+        return redirect(url_for("index"))
+
+    # Remove each entry; using user_id=1 to match get_schedule()
+    deleted_count = 0
+    for entry in entries:
+        deleted_count += db.remove_entry(entry, user_id=1)
+
+    if deleted_count == 0:
+        flash("No schedule items were removed.", "warning")
+    else:
+        flash(f"Removed {deleted_count} item{'s' if deleted_count != 1 else ''} from the schedule.", "success")
+
+    return redirect(url_for("index"))
 
 if __name__ == "__main__":
     # Enable `python app.py` local runs; otherwise use `flask --app app run --debug`

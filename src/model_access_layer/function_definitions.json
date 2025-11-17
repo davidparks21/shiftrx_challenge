@@ -1,0 +1,119 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "filter_date_range",
+      "description": "Filter appointment entries by an inclusive date range and update the user's view. Used when the user asks to be shown a date or range. Don't summarize the results, just confirm the setting.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "description": "Start date and time (inclusive). Format: YYYY-MM-DD HH:MM:SS (e.g., 2025-11-03 00:00:00).",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\s(0\\d|1\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+          },
+          "to_date": {
+            "type": "string",
+            "description": "End date and time (inclusive). Format: YYYY-MM-DD HH:MM:SS (e.g., 2025-11-10 23:59:59).",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\s(0\\d|1\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+          }
+        },
+        "required": ["from_date", "to_date"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_schedule_table",
+      "description": "Return the current appointment table exactly as shown to the user, after any filters or sorts. Use this when you need to inspect rows (for example: to find entries matching a title, provider, or date) and collect their entry_id values for later tool calls such as delete_entries. Call this with no arguments.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add_entry",
+      "description": "Add a new appointment entry. Use only when the user explicitly requests to create a new item. It is valid to call this multiple times to add multiple entries (for example, a series of appointments across several days).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Calendar date ONLY (no time). Format: YYYY-MM-DD (e.g., 2025-11-03). The time of day is specified ONLY by start_time and end_time.",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start time in 24-hour clock format HH:MM (e.g., 09:00, 14:30).",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End time in 24-hour clock format HH:MM (e.g., 11:00, 16:15). Must be after start_time.",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title/subject for the appointment, for example: \"New patient appointment\".",
+            "minLength": 1
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider name (e.g., \"Dr. Patel\").",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string",
+            "description": "Optional note (context, location, etc.), for example: \"Tentative appointment\".",
+            "minLength": 1
+          }
+        },
+        "required": ["date", "start_time", "end_time", "title", "provider"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_by_filter",
+      "description": "Delete schedule entries that match structured criteria such as provider and date. The model specifies the intent here (e.g., provider + exact date), and the application deterministically selects and deletes the matching entries.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Exact provider name to match (case-insensitive), e.g., \"Dr. Patel\"."
+          },
+          "title_contains": {
+            "type": "string",
+            "description": "If provided, only delete entries whose title contains this substring (case-insensitive)."
+          },
+          "date": {
+            "type": "string",
+            "description": "Delete only entries on this calendar date (inclusive). Format: YYYY-MM-DD (e.g., 2025-11-17). If provided, from_date and to_date are ignored.",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "from_date": {
+            "type": "string",
+            "description": "Start date (inclusive) of a date range filter. Format: YYYY-MM-DD. If omitted, defaults to the current view's start date.",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "to_date": {
+            "type": "string",
+            "description": "End date (inclusive) of a date range filter. Format: YYYY-MM-DD. If omitted, defaults to the current view's end date.",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+]

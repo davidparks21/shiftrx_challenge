@@ -7,15 +7,10 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('generate') }}" class="vstack gap-3">
           <div>
-            <label for="goals" class="form-label">Goals / constraints</label>
-            <textarea id="goals" name="goals" class="form-control" rows="4" placeholder="e.g., Deep work (20h), strength 3x/week, run 2x, learning 7h, chores, social"></textarea>
+            <label for="user_prompt" class="form-label">What would you like to do?</label>
+            <textarea id="user_prompt" name="user_prompt" class="form-control" rows="4" placeholder="e.g.: &quot;Show me the schedule for the next two days.&quot; or &quot;Cancel all appointments for Dr. Patel for tomorrow.&quot;"></textarea>
           </div>
-          <div>
-            <label for="seed" class="form-label">Seed (optional)</label>
-            <input id="seed" name="seed" class="form-control" value="Mon-Fri 09:00-17:00 work blocks; daily exercise; 2h learning">
-            <div class="form-text">Used as a hint to the LLM.</div>
-          </div>
-          <button class="btn btn-primary" type="submit">Generate plan</button>
+          <button class="btn btn-primary" type="submit">Submit</button>
         </form>
       </div>
     </div>
@@ -26,7 +21,9 @@
         <form method="post" action="{{ url_for('add') }}" class="row g-3">
           <div class="col-4">
             <label class="form-label">Date</label>
-            <input name="date" type="date" class="form-control" value="{{ week_start.isoformat() }}">
+            {# Use schedule.date_from as default instead of week_start #}
+            <input name="date" type="date" class="form-control"
+                   value="{{ schedule.daterange.date_from.strftime('%Y-%m-%d') }}">
           </div>
           <div class="col-4">
             <label class="form-label">Start</label>
@@ -59,39 +56,41 @@
     </div>
   </div>
 
-  <div class="col-lg-8">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header">AI Insight</div>
-      <div class="card-body">
-        <h6 class="card-title">Optimized recovery window</h6>
-        <p class="card-text text-muted">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam.
-        </p>
-      </div>
-    </div>
+<div class="col-lg-8">
 
+  <form method="post">
+    {# LLM conversation card #}
+    {% if session.get("conversation") %}
     <div class="card shadow-sm mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Recommended adjustment</span>
-        <span class="badge bg-warning-subtle text-warning-emphasis">Action needed</span>
+        <span>Response</span>
       </div>
       <div class="card-body">
-        <p class="card-text">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas tincidunt lectus vel massa porttitor, sed tempor orci vulputate. Approve adding a restorative yoga session on Wednesday evening?
+        <p class="card-text" style="white-space: pre-line;">
+          {{ session.get("conversation")["html_response"] | safe }}
         </p>
         <div class="d-flex justify-content-end">
-          <button type="button" class="btn btn-success">Approve</button>
         </div>
       </div>
     </div>
+    {% endif %}
 
     <div class="card shadow-sm">
       <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-          <div class="fw-semibold">Week at a glance</div>
-          <div class="text-muted small">{{ week_start.strftime('%b %d, %Y') }} – {{ week_end.strftime('%b %d, %Y') }}</div>
+          <div class="fw-semibold">Schedule at a glance</div>
+          <div class="text-muted small">
+            {{ schedule.daterange.date_from.strftime('%b %d, %Y') }} – {{ schedule.daterange.date_to.strftime('%b %d, %Y') }}
+          </div>
         </div>
+        <button
+          type="submit"
+          class="btn btn-outline-secondary btn-sm"
+          formaction="{{ url_for('clear_conversation') }}">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Clear conversation
+        </button>
       </div>
+
       <div class="card-body">
         <div class="table-responsive">
           <table id="schedule-table" class="table table-hover align-middle">
@@ -110,19 +109,24 @@
               </tr>
             </thead>
             <tbody>
-              {% if schedule %}
-                {% for it in schedule %}
-                {% set entry_date = day_dates.get(it.day) %}
+              {% if schedule and schedule.entries %}
+                {% for it in schedule.entries %}
                 <tr>
                   <td>
-                    <input type="checkbox" class="form-check-input row-check" name="selected_items" value="{{ it.id }}">
+                    <input type="checkbox" class="form-check-input row-check"
+                           name="selected_items" value="{{ it.entry_id }}"
+                           {% if schedule.selected_ids and it.entry_id in schedule.selected_ids %}checked{% endif %}>
                   </td>
                   <td>
-                    <div class="fw-semibold">{{ entry_date.strftime('%a') if entry_date else it.day }}</div>
-                    <div class="text-muted small">{{ entry_date.strftime('%b %d, %Y') if entry_date else '' }}</div>
+                    <div class="fw-semibold">
+                      {{ it.entry_date.strftime('%a') }}
+                    </div>
+                    <div class="text-muted small">
+                      {{ it.entry_date.strftime('%b %d, %Y') }}
+                    </div>
                   </td>
-                  <td>{{ it.start }}</td>
-                  <td>{{ it.end }}</td>
+                  <td>{{ it.start_time.strftime('%H:%M') }}</td>
+                  <td>{{ it.end_time.strftime('%H:%M') }}</td>
                   <td>{{ it.title }}</td>
                   <td><span class="badge bg-info-subtle text-info-emphasis">{{ it.provider }}</span></td>
                   <td class="text-muted">{{ it.note }}</td>
@@ -136,11 +140,20 @@
             </tbody>
           </table>
         </div>
+
+        <div class="d-flex justify-content-start mt-3">
+          <button
+            type="submit"
+            class="btn btn-outline-danger btn-sm"
+            formaction="{{ url_for('remove') }}">
+            Remove
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  </form>
 </div>
-
+</div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const checkAll = document.getElementById('check-all');

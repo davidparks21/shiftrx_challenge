@@ -8,4 +8,5 @@ shell:
 	scripts/shell.sh
 
 push:
-	scripts/push
+	scripts/push.sh
+
